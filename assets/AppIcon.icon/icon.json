@@ -1,0 +1,39 @@
+{
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "cube.svg",
+          "name" : "cube"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "background-light.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "background-dark.svg"
+            }
+          ],
+          "name" : "background"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

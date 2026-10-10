@@ -13,6 +13,8 @@ APP=target/release/DiskMap.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/diskmap "$APP/Contents/MacOS/DiskMap"
+# Assets.car has the light and dark icons (macOS 26+); AppIcon.icns is the fallback for older macOS.
+cp assets/Assets.car "$APP/Contents/Resources/Assets.car"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -25,6 +27,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>com.inactivenode.diskmap</string>
   <key>CFBundleExecutable</key><string>DiskMap</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>

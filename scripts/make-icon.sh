@@ -1,36 +1,19 @@
 #!/bin/sh
-# Turns assets/icon.svg into assets/icon.png (1024 px, used for the Dock icon
-# when running with cargo) and assets/AppIcon.icns (used by DiskMap.app).
-# Only needed after changing icon.svg; both outputs are committed.
+# Compiles assets/AppIcon.icon (an Icon Composer icon with light and dark
+# versions) into the files DiskMap.app uses:
+#   assets/Assets.car    light, dark and tinted icons for macOS 26 and later
+#   assets/AppIcon.icns  a single icon for older macOS
+#   assets/icon.png      the Dock icon when running with `cargo run`
+# Needs Xcode 26 or later. Only needed after changing the icon; the outputs are
+# committed so the app can be built without Xcode.
+# You can also open assets/AppIcon.icon in Icon Composer to preview or edit it.
 set -e
 cd "$(dirname "$0")/.."
 
-# Render the SVG with AppKit, which reads SVG natively on macOS 14 and later.
-WORK=$(mktemp -d)
-cat > "$WORK/render.swift" <<'SWIFT'
-import AppKit
-let args = CommandLine.arguments
-guard let image = NSImage(contentsOfFile: args[1]) else { fatalError("Couldn't read \(args[1])") }
-let size = 1024
-let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,
-                           samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                           colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-image.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
-NSGraphicsContext.restoreGraphicsState()
-try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[2]))
-SWIFT
-swiftc -O -o "$WORK/render" "$WORK/render.swift"
-"$WORK/render" assets/icon.svg assets/icon.png
-
-# Every size macOS asks for, then pack them into an .icns.
-ICONSET="$WORK/AppIcon.iconset"
-mkdir -p "$ICONSET"
-for size in 16 32 128 256 512; do
-  sips -z $size $size assets/icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-  double=$((size * 2))
-  sips -z $double $double assets/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o assets/AppIcon.icns
-echo "Made assets/icon.png and assets/AppIcon.icns"
+OUT=$(mktemp -d)
+xcrun actool assets/AppIcon.icon --compile "$OUT" --platform macosx --minimum-deployment-target 12.0 \
+  --app-icon AppIcon --output-partial-info-plist "$OUT/partial.plist" >/dev/null
+cp "$OUT/Assets.car" assets/Assets.car
+cp "$OUT/AppIcon.icns" assets/AppIcon.icns
+sips -s format png -Z 1024 assets/AppIcon.icns --out assets/icon.png >/dev/null
+echo "Made assets/Assets.car, assets/AppIcon.icns and assets/icon.png"
