@@ -142,6 +142,8 @@ pub struct DiskMapApp {
     /// The folder picker, while it's open. It answers with the chosen folder, or None if cancelled.
     folder_picker: Option<Receiver<Option<PathBuf>>>,
     show_about: bool,
+    /// Whether the menu bar's About item now opens our About window (see macmenu.rs).
+    about_menu_ready: bool,
 }
 
 impl DiskMapApp {
@@ -165,6 +167,15 @@ impl eframe::App for DiskMapApp {
         self.poll_scan(ui.ctx());
         self.poll_delete(ui.ctx());
         self.poll_folder_picker(ui.ctx());
+        #[cfg(target_os = "macos")]
+        {
+            if !self.about_menu_ready {
+                self.about_menu_ready = crate::macmenu::install(ui.ctx());
+            }
+            if crate::macmenu::about_requested() {
+                self.show_about = true;
+            }
+        }
 
         egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));

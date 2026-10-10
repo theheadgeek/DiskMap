@@ -61,6 +61,7 @@ DiskMap is written in Rust using [egui](https://github.com/emilk/egui) for the w
 | `src/access.rs` | Full Disk Access detection |
 | `src/theme.rs` | Colours and type, from the Inactive Node design system |
 | `src/brand.rs` | The Inactive Node mark and copyright line |
+| `src/macmenu.rs` | Makes the menu bar's About item open DiskMap's own About window |
 
 Run the tests with `cargo test`.
 

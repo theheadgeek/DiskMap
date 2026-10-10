@@ -5,6 +5,8 @@ mod app;
 mod brand;
 mod files;
 mod known;
+#[cfg(target_os = "macos")]
+mod macmenu;
 mod scan;
 mod theme;
 mod treemap;
