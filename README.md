@@ -14,10 +14,22 @@ See what's using your Mac's disk. DiskMap scans a folder, or your whole disk, an
 - **Clean up.** Right-click anything to reveal it in Finder, move it to the Trash (Finder's Put Back still works), or delete it permanently. Each one asks for confirmation first. DiskMap won't delete your home folder, macOS system folders, or folders macOS expects to exist, such as Documents and Library.
 - **Full Disk Access check.** macOS hides some folders, such as Mail, Messages and Safari, until you allow Full Disk Access. DiskMap tells you when it's off and opens the right page in System Settings.
 
+## Download
+
+Download `DiskMap-<version>-macOS-universal.zip` from the [latest release](https://github.com/theheadgeek/DiskMap/releases/latest), unzip it, and drag **DiskMap.app** into your Applications folder. It runs on Apple Silicon and Intel Macs with macOS 12 or later.
+
+DiskMap isn't notarized by Apple yet, so macOS blocks it the first time you open it:
+
+1. Open DiskMap. macOS says it can't verify the app. Click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down to the message about DiskMap, and click **Open Anyway**.
+3. Confirm with your password or Touch ID. After that, DiskMap opens normally.
+
+If you prefer Terminal, `xattr -dr com.apple.quarantine /Applications/DiskMap.app` does the same thing.
+
 ## Requirements
 
 - macOS 12 or later (it's developed on Apple Silicon)
-- [Rust](https://rustup.rs) 1.95 or later, to build it
+- [Rust](https://rustup.rs) 1.95 or later, to build it yourself
 
 ## Build and run
 
@@ -31,13 +43,16 @@ cargo run --release -- ~/Downloads   # starts scanning a folder straight away
 To build a standalone `DiskMap.app`:
 
 ```sh
-./scripts/make-app.sh             # builds target/release/DiskMap.app
-./scripts/make-app.sh --install   # also copies it to /Applications
+./scripts/make-app.sh               # builds target/release/DiskMap.app
+./scripts/make-app.sh --universal   # one app for both Apple Silicon and Intel Macs
+./scripts/make-app.sh --install     # also copies it to /Applications
 ```
+
+To publish a release, bump the version in `Cargo.toml`, add `docs/release-notes/v<version>.md`, commit and push, then run `./scripts/release.sh`. It builds the universal app, zips it, and creates the GitHub release.
 
 The app icon is `assets/AppIcon.icon`, an Icon Composer icon with light and dark versions; open it in Icon Composer (part of Xcode) to preview or edit it. After changing it, run `./scripts/make-icon.sh` (needs Xcode 26 or later) to regenerate the compiled icon files in `assets/`.
 
-The app is signed locally ("ad hoc"), not with an Apple Developer certificate. If macOS blocks it on another Mac, right-click it in Finder and choose **Open**.
+The app is signed locally ("ad hoc"), not with an Apple Developer certificate. If you copy it to another Mac, follow the steps under [Download](#download) to open it the first time.
 
 ## Seeing every folder
 
