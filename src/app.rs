@@ -1324,7 +1324,7 @@ fn about_panel(ui: &mut Ui) -> bool {
     let mut close = false;
     ui.vertical_centered(|ui| {
         ui.add_space(4.0);
-        ui.label(RichText::new("Disk Map").font(theme::display_font(30.0)));
+        ui.label(RichText::new("DiskMap").font(theme::display_font(30.0)));
         ui.label(
             RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION")))
                 .monospace()
