@@ -1,0 +1,8 @@
+<!-- Tinted and clear styles: macOS colours greyscale artwork, so the faces keep their light-to-dark shading in grey. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(164 153.1) scale(10.875)">
+    <polygon points="32,3 58,18 32,33 6,18" fill="#333333"/>
+    <polygon points="6,18 32,33 32,61 6,46" fill="#262626"/>
+    <polygon points="58,18 58,46 32,61 32,33" fill="#1e1e1e"/>
+  </g>
+</svg>

@@ -1,38 +1,80 @@
 {
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "glass" : false,
-          "image-name" : "cube.svg",
-          "name" : "cube"
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "cube-edges.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "cube-edges-tinted.svg"
+            }
+          ],
+          "name": "edges"
+        }
+      ]
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "cube-emblem.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "cube-emblem-tinted.svg"
+            }
+          ],
+          "name": "emblem"
+        }
+      ]
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "cube-body.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "cube-body-tinted.svg"
+            }
+          ],
+          "name": "cube"
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       }
     },
     {
-      "layers" : [
+      "layers": [
         {
-          "glass" : false,
-          "image-name-specializations" : [
+          "glass": false,
+          "image-name-specializations": [
             {
-              "value" : "background-light.svg"
+              "value": "background-light.svg"
             },
             {
-              "appearance" : "dark",
-              "value" : "background-dark.svg"
+              "appearance": "dark",
+              "value": "background-dark.svg"
             }
           ],
-          "name" : "background"
+          "name": "background"
         }
       ]
     }
   ],
-  "supported-platforms" : {
-    "squares" : [
+  "supported-platforms": {
+    "squares": [
       "macOS"
     ]
   }

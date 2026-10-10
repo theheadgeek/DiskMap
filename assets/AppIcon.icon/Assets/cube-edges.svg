@@ -1,0 +1,7 @@
+<!-- Inactive Node cube, front layer: the near edges and outline, drawn over the emblem. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(164 153.1) scale(10.875)">
+    <path d="M6 18 L32 33 M58 18 L32 33 M32 33 L32 61" fill="none" stroke="#4A2942" stroke-width="1.1" opacity=".85"/>
+    <polygon points="32,3 58,18 58,46 32,61 6,46 6,18" fill="none" stroke="#4A2942" stroke-width="1.3"/>
+  </g>
+</svg>
