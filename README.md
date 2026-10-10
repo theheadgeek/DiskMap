@@ -35,6 +35,8 @@ To build a standalone `DiskMap.app`:
 ./scripts/make-app.sh --install   # also copies it to /Applications
 ```
 
+The app icon is drawn in `assets/icon.svg`. After changing it, run `./scripts/make-icon.sh` to regenerate `assets/icon.png` and `assets/AppIcon.icns`.
+
 The app is signed locally ("ad hoc"), not with an Apple Developer certificate. If macOS blocks it on another Mac, right-click it in Finder and choose **Open**.
 
 ## Seeing every folder

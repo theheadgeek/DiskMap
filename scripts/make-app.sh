@@ -11,8 +11,9 @@ cargo build --release
 VERSION=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)
 APP=target/release/DiskMap.app
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/diskmap "$APP/Contents/MacOS/DiskMap"
+cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -23,6 +24,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>DiskMap</string>
   <key>CFBundleIdentifier</key><string>com.inactivenode.diskmap</string>
   <key>CFBundleExecutable</key><string>DiskMap</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
