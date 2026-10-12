@@ -91,6 +91,7 @@ enum Action {
     ClearType,
     /// Hide every other file type, laying the map out by this type alone.
     SetTypeOnly(bool),
+    SetAppearance(theme::Choice),
 }
 
 /// A delete waiting for the user to confirm it.
@@ -144,16 +145,20 @@ pub struct DiskMapApp {
     show_about: bool,
     /// Whether the menu bar's About item now opens our About window (see macmenu.rs).
     about_menu_ready: bool,
+    appearance: theme::Choice,
+    /// The palette last applied, so a change (including macOS switching to dark mode) is noticed.
+    palette: Option<&'static theme::Palette>,
 }
 
 impl DiskMapApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::apply(&cc.egui_ctx);
         let mut app = Self {
             full_disk_access: access::has_full_disk_access(),
             host_app: access::host_app(),
+            appearance: theme::Choice::load(),
             ..Self::default()
         };
+        app.follow_appearance(&cc.egui_ctx);
         // `diskmap ~/Downloads` starts scanning that folder straight away.
         if let Some(folder) = std::env::args().nth(1).filter(|arg| !arg.starts_with('-')) {
             app.start_scan(PathBuf::from(folder), &cc.egui_ctx);
@@ -164,6 +169,7 @@ impl DiskMapApp {
 
 impl eframe::App for DiskMapApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        self.follow_appearance(ui.ctx());
         self.poll_scan(ui.ctx());
         self.poll_delete(ui.ctx());
         self.poll_folder_picker(ui.ctx());
@@ -303,11 +309,10 @@ impl DiskMapApp {
             Ok(tree) => {
                 let scan = self.running.take().unwrap();
                 self.types = file_types(&tree);
-                self.type_colors = self.types.iter().map(|t| (t.ext.clone(), t.color)).collect();
+                self.recolor_types();
                 self.zoom.clear();
                 self.selected = None;
                 self.expanded = HashSet::from([NodePath::new()]);
-                self.map = None;
                 self.type_filter = None;
                 self.done = Some(Finished {
                     root: scan.root,
@@ -389,12 +394,39 @@ impl DiskMapApp {
             }
             Action::ClearType => self.type_filter = None,
             Action::SetTypeOnly(only) => self.type_only = only,
+            Action::SetAppearance(choice) => {
+                self.appearance = choice;
+                choice.save();
+                self.follow_appearance(ctx);
+            }
             Action::CopyPath(path) => {
                 if let Some(full) = self.full_path(&path) {
                     ctx.copy_text(full.display().to_string());
                 }
             }
         }
+    }
+
+    /// Applies the chosen theme's palette when it changes: when the user picks
+    /// another theme, or macOS switches between light and dark under "Match system".
+    fn follow_appearance(&mut self, ctx: &egui::Context) {
+        let palette = self.appearance.palette(ctx.system_theme());
+        if self.palette.is_none_or(|applied| !std::ptr::eq(applied, palette)) {
+            self.palette = Some(palette);
+            theme::apply(ctx, palette);
+            self.recolor_types();
+        }
+    }
+
+    /// Colours the file types from the palette, biggest first, and drops the map
+    /// drawn with the old colours.
+    fn recolor_types(&mut self) {
+        let palette = theme::palette();
+        for (i, file_type) in self.types.iter_mut().enumerate() {
+            file_type.color = palette.type_colors.get(i).copied().unwrap_or(palette.type_other);
+        }
+        self.type_colors = self.types.iter().map(|t| (t.ext.clone(), t.color)).collect();
+        self.map = None;
     }
 
     fn full_path(&self, path: &[usize]) -> Option<PathBuf> {
@@ -460,8 +492,7 @@ impl DiskMapApp {
             .collect();
         self.selected = Some(tree.find(&parent));
         self.types = file_types(tree);
-        self.type_colors = self.types.iter().map(|t| (t.ext.clone(), t.color)).collect();
-        self.map = None;
+        self.recolor_types();
         if !self.types.iter().any(|t| Some(&t.ext) == self.type_filter.as_ref()) {
             self.type_filter = None;
         }
@@ -480,7 +511,7 @@ impl DiskMapApp {
         if let Some(deleting) = &self.deleting {
             egui::Modal::new(egui::Id::new("deleting")).show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.add(egui::Spinner::new().color(theme::TONE));
+                    ui.add(egui::Spinner::new().color(theme::palette().tone));
                     let verb = if deleting.pending.permanent {
                         "Deleting"
                     } else {
@@ -510,7 +541,7 @@ fn confirm_panel(ui: &mut Ui, pending: &PendingDelete, actions: &mut Vec<Action>
     ui.label(group_label(if pending.permanent { "Delete permanently" } else { "Move to Trash" }));
     ui.add_space(4.0);
     ui.label(RichText::new(&pending.name).font(theme::display_font(22.0)));
-    ui.label(RichText::new(display_root(&pending.full)).color(theme::INK_SOFT));
+    ui.label(RichText::new(display_root(&pending.full)).color(theme::palette().ink_soft));
     ui.add_space(6.0);
     let mut amount = scan::format_size(pending.size);
     if pending.is_dir {
@@ -523,7 +554,7 @@ fn confirm_panel(ui: &mut Ui, pending: &PendingDelete, actions: &mut Vec<Action>
             RichText::new(format!(
                 "This {kind} will skip the Trash and be gone for good. This can't be undone."
             ))
-            .color(theme::BAD),
+            .color(theme::palette().bad),
         );
     } else {
         ui.label(format!("You can get this {kind} back from the Trash until you empty it."));
@@ -531,9 +562,9 @@ fn confirm_panel(ui: &mut Ui, pending: &PendingDelete, actions: &mut Vec<Action>
     ui.add_space(16.0);
     ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
         let button = if pending.permanent {
-            egui::Button::new(RichText::new("Delete permanently").color(theme::BAD_INK)).fill(theme::BAD)
+            egui::Button::new(RichText::new("Delete permanently").color(theme::palette().bad_ink)).fill(theme::palette().bad)
         } else {
-            egui::Button::new(RichText::new("Move to Trash").color(Color32::WHITE)).fill(theme::ACCENT)
+            egui::Button::new(RichText::new("Move to Trash").color(Color32::WHITE)).fill(theme::palette().accent)
         };
         if ui.add(button.stroke(Stroke::NONE)).clicked() {
             actions.push(Action::ConfirmDelete);
@@ -550,7 +581,7 @@ impl DiskMapApp {
     fn toolbar(&mut self, ui: &mut Ui) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("DiskMap").font(theme::display_font(22.0)).color(theme::INK));
+            ui.label(RichText::new("DiskMap").font(theme::display_font(22.0)).color(theme::palette().ink));
             ui.add_space(8.0);
             let idle = self.running.is_none();
             ui.add_enabled_ui(idle, |ui| {
@@ -573,8 +604,16 @@ impl DiskMapApp {
                 if ui.button("About").clicked() {
                     self.actions.push(Action::ShowAbout(true));
                 }
+                ui.menu_button("Appearance", |ui| {
+                    for choice in theme::Choice::ALL {
+                        if ui.radio(self.appearance == choice, choice.label()).clicked() {
+                            self.actions.push(Action::SetAppearance(choice));
+                            ui.close();
+                        }
+                    }
+                });
                 if !self.full_disk_access {
-                    let warning = egui::Button::new(RichText::new("Full Disk Access is off").color(theme::BAD));
+                    let warning = egui::Button::new(RichText::new("Full Disk Access is off").color(theme::palette().bad));
                     if ui
                         .add(warning)
                         .on_hover_text("Some folders are hidden from DiskMap. Click for how to fix it.")
@@ -600,7 +639,7 @@ impl DiskMapApp {
                 }
                 for depth in 0..self.zoom.len() {
                     node = &node.children[self.zoom[depth]];
-                    ui.label(RichText::new("/").color(theme::INK_SOFT));
+                    ui.label(RichText::new("/").color(theme::palette().ink_soft));
                     if ui.link(&node.name).clicked() {
                         self.actions.push(Action::Zoom(self.zoom[..=depth].to_vec()));
                     }
@@ -614,16 +653,16 @@ impl DiskMapApp {
         ui.add_space(3.0);
         ui.horizontal(|ui| {
             let Some(done) = &self.done else {
-                ui.label(RichText::new("Pick a folder to scan.").color(theme::INK_SOFT));
+                ui.label(RichText::new("Pick a folder to scan.").color(theme::palette().ink_soft));
                 return;
             };
             if let Some(path) = &self.selected {
                 let node = done.tree.get(path);
                 let share = percent(node.size, done.tree.size);
                 ui.label(RichText::new(scan::format_size(node.size)).monospace());
-                ui.label(RichText::new(format!("{share:.1}%")).monospace().color(theme::INK_SOFT));
+                ui.label(RichText::new(format!("{share:.1}%")).monospace().color(theme::palette().ink_soft));
                 if node.is_dir {
-                    ui.label(RichText::new(format!("{} files", group_digits(node.files))).color(theme::INK_SOFT));
+                    ui.label(RichText::new(format!("{} files", group_digits(node.files))).color(theme::palette().ink_soft));
                 }
                 ui.add(egui::Label::new(scan::full_path(&done.root, &done.tree, path).display().to_string()).truncate());
             } else {
@@ -636,11 +675,13 @@ impl DiskMapApp {
             }
             if done.errors > 0 {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(RichText::new(format!("{} items couldn't be read", group_digits(done.errors))).color(theme::INK_SOFT))
-                        .on_hover_text(
-                            "macOS protects some folders. To include them, turn on Full Disk Access \
+                    ui.label(
+                        RichText::new(format!("{} items couldn't be read", group_digits(done.errors))).color(theme::palette().ink_soft),
+                    )
+                    .on_hover_text(
+                        "macOS protects some folders. To include them, turn on Full Disk Access \
                              (the button at the top right explains how).",
-                        );
+                    );
                 });
             }
         });
@@ -712,7 +753,11 @@ fn tree_row(ui: &mut Ui, done: &Finished, row: &Row, selected: &Option<NodePath>
         let (rect, toggle) = ui.allocate_exact_size(vec2(14.0, height), Sense::click());
         if node.is_dir && !node.children.is_empty() {
             let open = expanded.contains(&row.path);
-            let color = if toggle.hovered() { theme::INK } else { theme::INK_SOFT };
+            let color = if toggle.hovered() {
+                theme::palette().ink
+            } else {
+                theme::palette().ink_soft
+            };
             let c = rect.center();
             let points = if open {
                 vec![pos2(c.x - 4.0, c.y - 2.0), pos2(c.x + 4.0, c.y - 2.0), pos2(c.x, c.y + 3.0)]
@@ -728,17 +773,21 @@ fn tree_row(ui: &mut Ui, done: &Finished, row: &Row, selected: &Option<NodePath>
         // Share of the parent folder, as a small bar.
         let (bar, _) = ui.allocate_exact_size(vec2(40.0, height), Sense::hover());
         let track = Rect::from_center_size(bar.center(), vec2(bar.width(), 6.0));
-        ui.painter().rect_filled(track, 3, theme::SURFACE_2);
+        ui.painter().rect_filled(track, 3, theme::palette().surface_2);
         let fraction = if parent_size > 0 {
             node.size as f32 / parent_size as f32
         } else {
             0.0
         };
         let fill = Rect::from_min_size(track.min, vec2(track.width() * fraction, track.height()));
-        ui.painter().rect_filled(fill, 3, theme::TONE);
+        ui.painter().rect_filled(fill, 3, theme::palette().tone);
 
         ui.allocate_ui_with_layout(vec2(74.0, height), Layout::right_to_left(Align::Center), |ui| {
-            ui.label(RichText::new(scan::format_size(node.size)).monospace().color(theme::INK_SOFT));
+            ui.label(
+                RichText::new(scan::format_size(node.size))
+                    .monospace()
+                    .color(theme::palette().ink_soft),
+            );
         });
 
         let name = if row.path.is_empty() {
@@ -828,7 +877,7 @@ fn item_menu(ui: &mut Ui, done: &Finished, path: &NodePath, actions: &mut Vec<Ac
         });
         ui.close();
     }
-    let delete = egui::Button::new(RichText::new("Delete permanently…").color(theme::BAD));
+    let delete = egui::Button::new(RichText::new("Delete permanently…").color(theme::palette().bad));
     if ui.add_enabled(blocked.is_none(), delete).clicked() {
         actions.push(Action::AskDelete {
             path: path.clone(),
@@ -837,21 +886,25 @@ fn item_menu(ui: &mut Ui, done: &Finished, path: &NodePath, actions: &mut Vec<Ac
         ui.close();
     }
     if let Some(reason) = blocked {
-        ui.label(RichText::new(reason).size(12.5).color(theme::INK_SOFT));
+        ui.label(RichText::new(reason).size(12.5).color(theme::palette().ink_soft));
     }
 }
 
 /// What DiskMap knows about an item, with a coloured dot and a word for how safe it is to delete.
 fn about(ui: &mut Ui, known: &Known, inside: Option<&str>) {
     if let Some(parent) = inside {
-        ui.label(RichText::new(format!("Inside {parent}")).size(12.5).color(theme::INK_SOFT));
+        ui.label(
+            RichText::new(format!("Inside {parent}"))
+                .size(12.5)
+                .color(theme::palette().ink_soft),
+        );
     }
     ui.label(RichText::new(known.title).strong());
-    ui.label(RichText::new(known.about).size(12.5).color(theme::INK_SOFT));
+    ui.label(RichText::new(known.about).size(12.5).color(theme::palette().ink_soft));
     let (color, verdict) = match known.safety {
-        Safety::Safe => (theme::OK, "Usually safe to delete"),
-        Safety::Careful => (theme::CAUTION, "Clean up with care"),
-        Safety::Keep => (theme::BAD, "Don't delete"),
+        Safety::Safe => (theme::palette().ok, "Usually safe to delete"),
+        Safety::Careful => (theme::palette().caution, "Clean up with care"),
+        Safety::Keep => (theme::palette().bad, "Don't delete"),
     };
     ui.horizontal(|ui| {
         let (dot, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
@@ -881,13 +934,10 @@ fn file_types(tree: &Node) -> Vec<FileType> {
             ext,
             size,
             files,
-            color: theme::TYPE_OTHER,
+            color: Color32::TRANSPARENT, // set by recolor_types
         })
         .collect();
     types.sort_unstable_by_key(|t| Reverse(t.size));
-    for (file_type, color) in types.iter_mut().zip(theme::TYPE_COLORS) {
-        file_type.color = color;
-    }
     types
 }
 
@@ -899,12 +949,15 @@ impl DiskMapApp {
         ui.add_space(4.0);
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             for file_type in self.types.iter().take(200) {
-                // Selection inverts, as everywhere in the theme: an ink block with paper text.
                 let selected = self.type_filter.as_ref() == Some(&file_type.ext);
                 let (fill, text, soft) = if selected {
-                    (theme::INK, theme::PAPER, theme::PAPER)
+                    (
+                        theme::palette().selection,
+                        theme::palette().on_selection,
+                        theme::palette().on_selection,
+                    )
                 } else {
-                    (Color32::TRANSPARENT, theme::INK, theme::INK_SOFT)
+                    (Color32::TRANSPARENT, theme::palette().ink, theme::palette().ink_soft)
                 };
                 let row = egui::Frame::new()
                     .fill(fill)
@@ -928,7 +981,7 @@ impl DiskMapApp {
                 let row = ui.interact(row.rect, ui.id().with(("file-type", &file_type.ext)), Sense::click());
                 if row.hovered() && !selected {
                     ui.painter()
-                        .rect_stroke(row.rect, 6, Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+                        .rect_stroke(row.rect, 6, Stroke::new(1.0, theme::palette().line), StrokeKind::Inside);
                 }
                 let hint = if selected {
                     "Click to stop highlighting"
@@ -945,7 +998,7 @@ impl DiskMapApp {
                 }
             }
             if self.types.len() > 200 {
-                ui.label(RichText::new(format!("and {} more", self.types.len() - 200)).color(theme::INK_SOFT));
+                ui.label(RichText::new(format!("and {} more", self.types.len() - 200)).color(theme::palette().ink_soft));
             }
         });
     }
@@ -956,7 +1009,7 @@ impl DiskMapApp {
 impl DiskMapApp {
     fn central(&mut self, ui: &mut Ui) {
         let rect = ui.available_rect_before_wrap();
-        ui.painter().rect_filled(rect, 0, theme::PAPER);
+        ui.painter().rect_filled(rect, 0, theme::palette().paper);
 
         if let Some(scan) = &self.running {
             self.scanning_screen(ui, rect, scan.progress.clone(), scan.root.clone(), scan.started);
@@ -980,26 +1033,26 @@ impl DiskMapApp {
                 .size(12.0)
                 .strong()
                 .extra_letter_spacing(2.0)
-                .color(theme::INK_SOFT),
+                .color(theme::palette().ink_soft),
         );
         ui.add_space(6.0);
         ui.label(
             RichText::new("See what's using your disk")
                 .font(theme::display_font(40.0))
-                .color(theme::INK),
+                .color(theme::palette().ink),
         );
         ui.add_space(8.0);
         ui.label(
             RichText::new("Scan a folder and every file becomes a rectangle sized by the space it takes. Click one to find it, double-click to zoom in.")
                 .size(15.5)
-                .color(theme::INK_SOFT),
+                .color(theme::palette().ink_soft),
         );
         ui.add_space(24.0);
         ui.horizontal(|ui| {
             // Centre the three buttons as a group.
             ui.add_space((ui.available_width() - 410.0).max(0.0) / 2.0);
             let primary = egui::Button::new(RichText::new("Scan home folder").color(Color32::WHITE))
-                .fill(theme::ACCENT)
+                .fill(theme::palette().accent)
                 .stroke(Stroke::NONE);
             if ui.add(primary).clicked() {
                 self.actions.push(Action::Scan(home()));
@@ -1019,8 +1072,8 @@ impl DiskMapApp {
             });
         } else {
             egui::Frame::new()
-                .fill(theme::SURFACE)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::palette().surface)
+                .stroke(Stroke::new(1.0, theme::palette().line))
                 .corner_radius(16)
                 .inner_margin(20)
                 .show(ui, |ui| {
@@ -1042,7 +1095,7 @@ impl DiskMapApp {
         );
         let ui = &mut column;
         ui.add_space((rect.height() / 2.0 - 90.0).max(0.0));
-        ui.add(egui::Spinner::new().size(28.0).color(theme::TONE));
+        ui.add(egui::Spinner::new().size(28.0).color(theme::palette().tone));
         ui.add_space(12.0);
         ui.label(RichText::new(format!("Scanning {}", display_root(&root))).font(theme::display_font(26.0)));
         ui.add_space(6.0);
@@ -1054,7 +1107,7 @@ impl DiskMapApp {
                 started.elapsed().as_secs_f32()
             ))
             .monospace()
-            .color(theme::INK_SOFT),
+            .color(theme::palette().ink_soft),
         );
         ui.add_space(16.0);
         if ui.button("Cancel").clicked() {
@@ -1085,11 +1138,11 @@ impl DiskMapApp {
             let weights = only.map(|ext| treemap::weigh(view, &move |node: &Node| scan::extension(&node.name) == ext));
 
             let type_colors = &self.type_colors;
-            let type_color = |ext: &str| *type_colors.get(ext).unwrap_or(&theme::TYPE_OTHER);
+            let type_color = |ext: &str| *type_colors.get(ext).unwrap_or(&theme::palette().type_other);
             let color = |node: &Node| match (&weights, &filter) {
                 // With other types hidden, a folder too small to split holds only this type.
                 (Some(_), Some((ext, _))) if node.is_dir => type_color(ext),
-                _ if node.is_dir => theme::FOLDER,
+                _ if node.is_dir => theme::palette().folder,
                 _ => type_color(&scan::extension(&node.name)),
             };
             let tiles = treemap::layout(view, weights.as_ref(), map_rect, &color);
@@ -1127,16 +1180,17 @@ impl DiskMapApp {
                 Align2::CENTER_CENTER,
                 message,
                 FontId::proportional(15.0),
-                theme::INK_SOFT,
+                theme::palette().ink_soft,
             );
         }
 
-        // Outline the selection in accent, the theme's colour for interaction.
+        // Outline the selection: in accent, Inactive Node's colour for interaction, or in ink
+        // where blue is both the accent and a file type.
         if let Some(rel) = self.selected.as_ref().and_then(|s| s.strip_prefix(self.zoom.as_slice())) {
             // The selected item itself, or the closest tile containing it when it's too small to draw.
             let tile = map.tiles.iter().filter(|t| rel.starts_with(&t.path)).max_by_key(|t| t.path.len());
             if let Some(tile) = tile {
-                painter.rect_stroke(tile.rect, 0, Stroke::new(2.0, theme::ACCENT), StrokeKind::Inside);
+                painter.rect_stroke(tile.rect, 0, Stroke::new(2.0, theme::palette().map_selection), StrokeKind::Inside);
             }
         }
 
@@ -1147,12 +1201,12 @@ impl DiskMapApp {
 
         let mut response = response;
         if let (Some(tile), Some(path)) = (hovered, &hovered_path) {
-            painter.rect_stroke(tile.rect, 0, Stroke::new(1.0, theme::INK), StrokeKind::Inside);
+            painter.rect_stroke(tile.rect, 0, Stroke::new(1.0, theme::palette().ink), StrokeKind::Inside);
             let node = done.tree.get(path);
             let root = &done.root;
             response = response.on_hover_ui_at_pointer(|ui| {
                 ui.label(RichText::new(&node.name).strong());
-                ui.label(RichText::new(scan::full_path(root, &done.tree, path).display().to_string()).color(theme::INK_SOFT));
+                ui.label(RichText::new(scan::full_path(root, &done.tree, path).display().to_string()).color(theme::palette().ink_soft));
                 let mut line = scan::format_size(node.size);
                 if node.is_dir {
                     line += &format!(" · {} files", group_digits(node.files));
@@ -1204,8 +1258,9 @@ impl DiskMapApp {
 impl DiskMapApp {
     /// The strip above the map while a file type is highlighted.
     fn type_bar(&mut self, ui: &mut Ui, bar: Rect, ext: &str) {
-        ui.painter().rect_filled(bar, 0, theme::SURFACE);
-        ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+        ui.painter().rect_filled(bar, 0, theme::palette().surface);
+        ui.painter()
+            .hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, theme::palette().line));
         let Some(file_type) = self.types.iter().find(|t| t.ext == ext) else {
             return;
         };
@@ -1226,7 +1281,7 @@ impl DiskMapApp {
                 group_digits(file_type.files)
             ))
             .monospace()
-            .color(theme::INK_SOFT),
+            .color(theme::palette().ink_soft),
         );
         ui.add_space(12.0);
         let mut only = self.type_only;
@@ -1272,7 +1327,7 @@ fn access_panel(ui: &mut Ui, granted: bool, checked_again: bool, host: &str, act
     if granted {
         ui.horizontal(|ui| {
             let (dot, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
-            ui.painter().circle_filled(dot.center(), 5.0, theme::OK);
+            ui.painter().circle_filled(dot.center(), 5.0, theme::palette().ok);
             ui.label("Full Disk Access is on. Scans can see every folder.");
         });
         return;
@@ -1289,7 +1344,7 @@ fn access_panel(ui: &mut Ui, granted: bool, checked_again: bool, host: &str, act
              your totals will come up short. It's the Mac's version of \"Run as administrator\", \
              and sudo doesn't get around it.",
         )
-        .color(theme::INK_SOFT),
+        .color(theme::palette().ink_soft),
     );
     ui.add_space(10.0);
     for step in [
@@ -1307,7 +1362,7 @@ fn access_panel(ui: &mut Ui, granted: bool, checked_again: bool, host: &str, act
                  Run as DiskMap.app, it asks for itself."
             ))
             .size(12.5)
-            .color(theme::INK_SOFT),
+            .color(theme::palette().ink_soft),
         );
     }
     ui.add_space(12.0);
@@ -1321,7 +1376,7 @@ fn access_panel(ui: &mut Ui, granted: bool, checked_again: bool, host: &str, act
     });
     if checked_again {
         ui.add_space(6.0);
-        ui.label(RichText::new(format!("Still off. If you just turned it on, quit {host} and open it again.")).color(theme::BAD));
+        ui.label(RichText::new(format!("Still off. If you just turned it on, quit {host} and open it again.")).color(theme::palette().bad));
     }
 }
 
@@ -1339,18 +1394,19 @@ fn about_panel(ui: &mut Ui) -> bool {
         ui.label(
             RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION")))
                 .monospace()
-                .color(theme::INK_SOFT),
+                .color(theme::palette().ink_soft),
         );
         ui.add_space(10.0);
         ui.label(
-            RichText::new("See what's using your disk. Every file becomes a rectangle sized by the space it takes.").color(theme::INK_SOFT),
+            RichText::new("See what's using your disk. Every file becomes a rectangle sized by the space it takes.")
+                .color(theme::palette().ink_soft),
         );
         ui.add_space(8.0);
         ui.hyperlink_to("github.com/theheadgeek/DiskMap", REPOSITORY);
         ui.label(
             RichText::new("Free and open source, under the MIT license.")
                 .size(12.5)
-                .color(theme::INK_SOFT),
+                .color(theme::palette().ink_soft),
         );
         ui.add_space(20.0);
         brand_footer(ui);
@@ -1366,7 +1422,7 @@ fn brand_footer(ui: &mut Ui) {
         let (rect, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
         brand::paint_cube(ui.painter(), rect);
         ui.add_space(6.0);
-        ui.label(RichText::new(brand::copyright()).size(12.5).color(theme::INK_SOFT));
+        ui.label(RichText::new(brand::copyright()).size(12.5).color(theme::palette().ink_soft));
     });
 }
 
@@ -1400,7 +1456,7 @@ fn group_label(text: &str) -> RichText {
         .size(11.5)
         .strong()
         .extra_letter_spacing(1.6)
-        .color(theme::INK_SOFT)
+        .color(theme::palette().ink_soft)
 }
 
 fn percent(part: u64, whole: u64) -> f64 {
